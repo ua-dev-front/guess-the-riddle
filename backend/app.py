@@ -1,12 +1,14 @@
 import os
-import psycopg2
 
 from dotenv import load_dotenv
 from flask import abort, Flask, make_response, request, session
 from flask_cors import CORS
+import psycopg2
 from werkzeug.security import check_password_hash, generate_password_hash
 
 USER_KEY = 'user_key'
+MAX_RIDDLE_LEN = 5000
+MAX_ANSWER_LEN = 500
 
 load_dotenv()
 app = Flask(__name__)
@@ -78,14 +80,22 @@ def log_out() -> dict[str, bool]:
 
 
 @app.route('/addRiddle', methods=['POST'])
-def add_riddle() -> str:
+def add_riddle() -> dict[str, str | dict[str, int | str] | None]:
     riddle = 'riddle'
     answer = 'answer'
+    error = 'error'
     data = request.get_json()
-    if type(data) != dict or data.keys() != {riddle, answer}:
+    if type(data) != dict or data.keys() != {riddle, answer} or type(data[riddle]) != str or type(data[answer]) != str:
         abort(400)
+    if len(data[riddle]) > MAX_RIDDLE_LEN:
+        return {error: 'long_riddle'}
+    if len(data[answer]) > MAX_ANSWER_LEN:
+        return {error: 'long_answer'}
     riddle_data = data[riddle], data[answer]
-    return '5'
+    cur.execute('insert into riddles (riddle, solution) values (%s, %s) returning id, create_date', riddle_data)
+    con.commit()
+    riddle_id, creation_date = cur.fetchone()
+    return {error: None, 'data': {'id': riddle_id, 'creationDate': str(creation_date.date())}}
 
 
 @app.route('/verifyAnswer', methods=['GET'])
